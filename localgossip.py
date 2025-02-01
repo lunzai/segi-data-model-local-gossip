@@ -16,30 +16,33 @@ from secrets import token_urlsafe
 DB_CONFIG = {
     'host': 'localhost',
     'user': 'root',
-    'password': '',
-    'database': 'localgossip'
+    'password': 'root',
+    'database': 'local_gossip'
 }
 
 # Generation constants - edit these to control how many rows to generate
 GEN_CONSTANTS = {
     'users': 50,
     'groups': 10,
-    'group_users': 100,
-    'posts': 200,
-    'comments': 400,
+    'group_users': 50,
+    'posts': 100,
+    'comments': 150,
     'files': 100,
     'post_files': 50,
     'comment_files': 50,
-    'tags': 20,
+    'tags': 25,
     'post_likes': 150,
     'post_mentions': 50,
     'post_flags': 5,
-    'comment_flags': 5
+    'comment_flags': 5,
+    'post_tags': 100
 }
 
 def log(message, level='INFO'):
-    """Unified logging format"""
-    print(f"[{level}] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {message}")
+    """Unified logging format with padded level strings"""
+    # Pad level string to 7 characters (longest level is 'SUCCESS')
+    padded_level = level.ljust(7)
+    print(f"[ {padded_level} ] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {message}")
 
 def get_db_connection():
     """Create and return database connection"""
@@ -47,7 +50,7 @@ def get_db_connection():
         conn = mysql.connector.connect(**DB_CONFIG)
         return conn
     except Error as e:
-        log(f"Error connecting to database: {e}", "ERROR")
+        log(f"⚠️  Error connecting to database: {e}", "ERROR")
         exit(1)
 
 def read_schema():
@@ -56,7 +59,7 @@ def read_schema():
         with open('LocalGossip.sql', 'r') as file:
             return file.read()
     except FileNotFoundError:
-        log("Schema file 'LocalGossip.sql' not found", "ERROR")
+        log("⚠️  Schema file 'LocalGossip.sql' not found", "ERROR")
         exit(1)
 
 def convert_to_slug(text):
@@ -81,13 +84,16 @@ def generate_password_hash():
 def generate_timestamp(index, total, years_back=3):
     """Generate a unix timestamp between now and years_back ago, distributed based on index"""
     now = datetime.now()
-    three_years_ago = now - timedelta(days=years_back * 365)
+    years_ago = now - timedelta(days=years_back * 365)
     
     # Calculate a relative position between 0 and 1 based on the index
     position = index / total
     
-    # Generate timestamp between three_years_ago and now based on position
-    timestamp = three_years_ago + (now - three_years_ago) * position
+    # Generate timestamp between years_ago and now, ensuring it's not in the future
+    timestamp = years_ago + (now - years_ago) * position
+    if timestamp > now:
+        timestamp = now
+    
     return int(timestamp.timestamp())
 
 @click.group()
@@ -98,8 +104,9 @@ def cli():
 @cli.command()
 def init():
     """Initialize database schema"""
+    print()
     if not click.confirm('⚠️  This will drop all existing tables and data. Are you sure?'):
-        log("Operation cancelled by user")
+        log("⚠️  Operation cancelled by user")
         return
 
     conn = get_db_connection()
@@ -107,19 +114,19 @@ def init():
     schema = read_schema()
 
     try:
-        log("Starting schema initialization...")
+        print()
+        log("⌛ Starting schema initialization...")
         
         # Execute each SQL statement
         for statement in schema.split(';'):
             if statement.strip():
-                log(f"Executing: {statement[:100]}...")
                 cursor.execute(statement)
                 
         conn.commit()
-        log("Schema initialization completed successfully", "SUCCESS")
+        log("✅  Schema initialization completed successfully", "SUCCESS")
 
     except Error as e:
-        log(f"Error during schema initialization: {e}", "ERROR")
+        log(f"⚠️  Error during schema initialization: {e}", "ERROR")
         conn.rollback()
     finally:
         cursor.close()
@@ -128,15 +135,17 @@ def init():
 @cli.command()
 def generate():
     """Generate fake data for the database"""
-    fake = Faker(['en_MY', 'ms_MY'])
+    fake = Faker(['en_MS'])
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
     try:
-        log("Starting data generation...")
+        print()
+        log("⌛ Starting data generation...")
 
         # Generate Users
-        log(f"Generating {GEN_CONSTANTS['users']} users...")
+        print()
+        log(f"⌛ Generating {GEN_CONSTANTS['users']} users...")
         total_users = GEN_CONSTANTS['users']
         for i in range(total_users):
             email = fake.email()
@@ -144,7 +153,7 @@ def generate():
             # Determine role based on count
             role = 'Normal'
             if total_users >= 20:
-                if i < 5:  # First 5 users are admin
+                if i < 3:  # First 5 users are admin
                     role = 'Admin'
             else:
                 if i == 0:  # Only first user is admin
@@ -164,10 +173,11 @@ def generate():
                 timestamp  # updated_at same as created_at
             ))
         conn.commit()
-        log(f"Generated {GEN_CONSTANTS['users']} users", "SUCCESS")
+        log(f"✅  Generated {GEN_CONSTANTS['users']} users", "SUCCESS")
 
         # Generate Groups
-        log(f"Generating {GEN_CONSTANTS['groups']} groups...")
+        print()
+        log(f"⌛ Generating {GEN_CONSTANTS['groups']} groups...")
         for i in range(GEN_CONSTANTS['groups']):
             name = fake.company()
             cursor.execute("""
@@ -182,7 +192,7 @@ def generate():
                 timestamp
             ))
         conn.commit()
-        log(f"Generated {GEN_CONSTANTS['groups']} groups", "SUCCESS")
+        log(f"✅  Generated {GEN_CONSTANTS['groups']} groups", "SUCCESS")
 
         # Get existing user and group IDs
         cursor.execute("SELECT id FROM user")
@@ -192,7 +202,8 @@ def generate():
         group_ids = [row['id'] for row in cursor.fetchall()]
 
         # Generate Group Users
-        log(f"Generating {GEN_CONSTANTS['group_users']} group users...")
+        print()
+        log(f"⌛ Generating {GEN_CONSTANTS['group_users']} group users...")
         group_user_count = {}  # Track users per group
         for _ in range(GEN_CONSTANTS['group_users']):
             try:
@@ -216,12 +227,13 @@ def generate():
             except Error:
                 continue  # Skip if duplicate
         conn.commit()
-        log(f"Generated group users", "SUCCESS")
+        log(f"✅  Generated group users", "SUCCESS")
 
         # Generate Flag Categories
-        log(f"Generating {GEN_CONSTANTS['flag_categories']} flag categories...")
+        print()
+        log(f"⌛ Generating flag categories...")
         categories = ['Spam', 'Harassment', 'Inappropriate', 'Violence', 'Other']
-        for category in categories[:GEN_CONSTANTS['flag_categories']]:
+        for category in categories:
             cursor.execute("""
                 INSERT INTO flag_category (name, name_slug, status, created_at, updated_at)
                 VALUES (%s, %s, %s, %s, %s)
@@ -229,14 +241,15 @@ def generate():
                 category,
                 convert_to_slug(category),
                 'Active',
-                timestamp := generate_timestamp(_, GEN_CONSTANTS['flag_categories']),
+                timestamp := generate_timestamp(_, 5),
                 timestamp
             ))
         conn.commit()
-        log(f"Generated flag categories", "SUCCESS")
+        log(f"✅  Generated flag categories", "SUCCESS")
 
         # Generate Posts
-        log(f"Generating {GEN_CONSTANTS['posts']} posts...")
+        print()
+        log(f"⌛ Generating {GEN_CONSTANTS['posts']} posts...")
         for _ in range(GEN_CONSTANTS['posts']):
             # Determine if post should have location (20% chance)
             has_location = random.random() < 0.20
@@ -261,14 +274,15 @@ def generate():
                 timestamp
             ))
         conn.commit()
-        log(f"Generated {GEN_CONSTANTS['posts']} posts", "SUCCESS")
+        log(f"✅  Generated {GEN_CONSTANTS['posts']} posts", "SUCCESS")
 
         # Get post IDs
         cursor.execute("SELECT id FROM post")
         post_ids = [row['id'] for row in cursor.fetchall()]
 
         # Generate Comments
-        log(f"Generating {GEN_CONSTANTS['comments']} comments...")
+        print()
+        log(f"⌛ Generating {GEN_CONSTANTS['comments']} comments...")
         for _ in range(GEN_CONSTANTS['comments']):
             cursor.execute("""
                 INSERT INTO comment (post_id, user_id, content, created_at, updated_at)
@@ -281,7 +295,7 @@ def generate():
                 timestamp
             ))
         conn.commit()
-        log(f"Generated {GEN_CONSTANTS['comments']} comments", "SUCCESS")
+        log(f"✅  Generated {GEN_CONSTANTS['comments']} comments", "SUCCESS")
 
         # Get comment IDs
         cursor.execute("SELECT id FROM comment")
@@ -292,7 +306,8 @@ def generate():
         flag_category_ids = [row['id'] for row in cursor.fetchall()]
 
         # Generate Post Flags
-        log(f"Generating {GEN_CONSTANTS['post_flags']} post flags...")
+        print()
+        log(f"⌛ Generating {GEN_CONSTANTS['post_flags']} post flags...")
         for _ in range(GEN_CONSTANTS['post_flags']):
             try:
                 created_at = generate_timestamp(_, GEN_CONSTANTS['post_flags'])
@@ -330,10 +345,11 @@ def generate():
             except Error:
                 continue
         conn.commit()
-        log(f"Generated {GEN_CONSTANTS['post_flags']} post flags", "SUCCESS")
+        log(f"✅  Generated {GEN_CONSTANTS['post_flags']} post flags", "SUCCESS")
 
         # Generate Comment Flags
-        log(f"Generating {GEN_CONSTANTS['comment_flags']} comment flags...")
+        print()
+        log(f"⌛ Generating {GEN_CONSTANTS['comment_flags']} comment flags...")
         for _ in range(GEN_CONSTANTS['comment_flags']):
             try:
                 created_at = generate_timestamp(_, GEN_CONSTANTS['comment_flags'])
@@ -371,12 +387,13 @@ def generate():
             except Error:
                 continue
         conn.commit()
-        log(f"Generated {GEN_CONSTANTS['comment_flags']} comment flags", "SUCCESS")
+        log(f"✅  Generated {GEN_CONSTANTS['comment_flags']} comment flags", "SUCCESS")
 
         # Generate Tags
-        log(f"Generating {GEN_CONSTANTS['tags']} tags...")
+        print()
+        log(f"⌛ Generating {GEN_CONSTANTS['tags']} tags...")
         for _ in range(GEN_CONSTANTS['tags']):
-            name = fake.word()
+            name = f"{fake.word()} {fake.word()}"
             cursor.execute("""
                 INSERT INTO tag (name, name_slug, status, created_at, updated_at)
                 VALUES (%s, %s, %s, %s, %s)
@@ -388,10 +405,33 @@ def generate():
                 timestamp
             ))
         conn.commit()
-        log(f"Generated {GEN_CONSTANTS['tags']} tags", "SUCCESS")
+        log(f"✅  Generated {GEN_CONSTANTS['tags']} tags", "SUCCESS")
+
+        # Get tag IDs
+        cursor.execute("SELECT id FROM tag")
+        tag_ids = [row['id'] for row in cursor.fetchall()]
+
+        # Generate Post Tags
+        print()
+        log(f"⌛ Generating {GEN_CONSTANTS['post_tags']} post tags...")
+        for _ in range(GEN_CONSTANTS['post_tags']):
+            try:
+                cursor.execute("""
+                    INSERT INTO post_tag (post_id, tag_id, created_at)
+                    VALUES (%s, %s, %s)
+                """, (
+                    random.choice(post_ids),
+                    random.choice(tag_ids),
+                    generate_timestamp(_, GEN_CONSTANTS['post_tags'])
+                ))
+            except Error:
+                continue  # Skip if duplicate
+        conn.commit()
+        log(f"✅  Generated post tags", "SUCCESS")
 
         # Generate Post Likes
-        log(f"Generating {GEN_CONSTANTS['post_likes']} post likes...")
+        print()
+        log(f"⌛ Generating {GEN_CONSTANTS['post_likes']} post likes...")
         for _ in range(GEN_CONSTANTS['post_likes']):
             try:
                 cursor.execute("""
@@ -406,10 +446,11 @@ def generate():
             except Error:
                 continue  # Skip if duplicate
         conn.commit()
-        log(f"Generated post likes", "SUCCESS")
+        log(f"✅  Generated post likes", "SUCCESS")
 
         # Generate Post Mentions
-        log(f"Generating {GEN_CONSTANTS['post_mentions']} post mentions...")
+        print()
+        log(f"⌛ Generating {GEN_CONSTANTS['post_mentions']} post mentions...")
         for _ in range(GEN_CONSTANTS['post_mentions']):
             try:
                 cursor.execute("""
@@ -423,10 +464,11 @@ def generate():
             except Error:
                 continue  # Skip if duplicate
         conn.commit()
-        log(f"Generated post mentions", "SUCCESS")
+        log(f"✅  Generated post mentions", "SUCCESS")
 
         # Generate Post Files
-        log(f"Generating {GEN_CONSTANTS['post_files']} post files...")
+        print()
+        log(f"⌛ Generating {GEN_CONSTANTS['post_files']} post files...")
         for i in range(GEN_CONSTANTS['post_files']):
             # First create a file
             is_image = random.random() < 0.75  # 75% chance of being an image
@@ -465,10 +507,11 @@ def generate():
                 timestamp
             ))
         conn.commit()
-        log(f"Generated post files", "SUCCESS")
+        log(f"✅  Generated post files", "SUCCESS")
 
         # Generate Comment Files
-        log(f"Generating {GEN_CONSTANTS['comment_files']} comment files...")
+        print()
+        log(f"⌛ Generating {GEN_CONSTANTS['comment_files']} comment files...")
         for i in range(GEN_CONSTANTS['comment_files']):
             # First create a file
             is_image = random.random() < 0.75  # 75% chance of being an image
@@ -507,16 +550,93 @@ def generate():
                 timestamp
             ))
         conn.commit()
-        log(f"Generated comment files", "SUCCESS")
+        log("✅  Generated comment files", "SUCCESS")
 
-        log("Data generation completed successfully", "SUCCESS")
+        print()
+        log("✅  Data generation completed successfully", "SUCCESS")
 
     except Error as e:
-        log(f"Error during data generation: {e}", "ERROR")
+        log(f"⚠️  Error during data generation: {e}", "ERROR")
         conn.rollback()
     finally:
         cursor.close()
         conn.close()
+
+@cli.command()
+def test():
+    """Test database connection and configuration"""
+    print()
+    log("⌛ Testing database connection...")
+    
+    # Test MySQL connection without database
+    try:
+        test_config = DB_CONFIG.copy()
+        test_config.pop('database', None)  # Remove database from config
+        conn = mysql.connector.connect(**test_config)
+        log("✅  MySQL connection successful", "SUCCESS")
+        
+        # Test if database exists
+        cursor = conn.cursor()
+        cursor.execute("SHOW DATABASES LIKE %s", (DB_CONFIG['database'],))
+        database_exists = cursor.fetchone() is not None
+        
+        if database_exists:
+            log(f"✅  Database '{DB_CONFIG['database']}' exists", "SUCCESS")
+            
+            # Test database connection
+            try:
+                test_conn = mysql.connector.connect(**DB_CONFIG)
+                log("✅  Database connection successful", "SUCCESS")
+                test_conn.close()
+            except Error as e:
+                log(f"⚠️  Database connection failed: {e}", "ERROR")
+                log("Please check your database permissions", "INFO")
+        else:
+            log(f"⚠️  Database '{DB_CONFIG['database']}' does not exist", "ERROR")
+            log("\nTo create the database, run this SQL command:", "INFO")
+            log("\nCREATE SCHEMA `local_gossip` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\n", "INFO")
+            
+        cursor.close()
+        conn.close()
+        
+        # Test SQL file existence and readability
+        print()
+        log("⌛ Testing schema file...")
+        try:
+            with open('LocalGossip.sql', 'r') as file:
+                log("✅  Schema file exists and is readable", "SUCCESS")
+        except FileNotFoundError:
+            log("⚠️  Schema file 'LocalGossip.sql' not found", "ERROR")
+            log("Please ensure LocalGossip.sql is in the same directory", "INFO")
+        except PermissionError:
+            log("⚠️  Cannot read schema file due to permissions", "ERROR")
+            log("Please check file permissions for LocalGossip.sql", "INFO")
+        
+    except Error as e:
+        log("⚠️  MySQL connection failed", "ERROR")
+        log(f"⚠️  Error details: {e}", "ERROR")
+        log("\nPlease check:", "INFO")
+        log("1. MySQL server is running", "INFO")
+        log("2. Host and port are correct", "INFO")
+        log("3. Username and password are correct", "INFO")
+        log("4. User has sufficient privileges", "INFO")
+
+@cli.command()
+def migrate():
+    """Initialize schema and generate test data"""
+    print()
+    log("⌛ Starting migration...")
+    
+    # Run init command
+    init.callback()
+    
+    # Run generate command if init was successful
+    if click.get_current_context().info_name == 'migrate':
+        print()
+        generate.callback()
+        
+        print()
+        log("✅  Migration completed successfully", "SUCCESS")
 
 if __name__ == '__main__':
     cli() 

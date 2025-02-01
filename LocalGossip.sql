@@ -1,3 +1,11 @@
+SET NAMES utf8mb4;
+SET CHARACTER SET utf8mb4;
+SET character_set_client = utf8mb4;
+SET character_set_connection = utf8mb4;
+SET character_set_results = utf8mb4;
+SET collation_connection = utf8mb4_unicode_ci;
+SET FOREIGN_KEY_CHECKS = 0;
+
 DROP TABLE IF EXISTS `post_like`;
 DROP TABLE IF EXISTS `post_mention_user`;
 DROP TABLE IF EXISTS `post_tag`;
@@ -12,6 +20,9 @@ DROP TABLE IF EXISTS `group_user`;
 DROP TABLE IF EXISTS `group`;
 DROP TABLE IF EXISTS `tag`;
 DROP TABLE IF EXISTS `user`;
+
+SET FOREIGN_KEY_CHECKS = 1;
+
 CREATE TABLE `user` (
   `id` INT PRIMARY KEY AUTO_INCREMENT,
   `email` VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin UNIQUE NOT NULL,
@@ -74,11 +85,11 @@ CREATE TABLE `flag_category` (
 CREATE TABLE `post` (
   `id` INT PRIMARY KEY AUTO_INCREMENT,
   `user_id` INT NOT NULL,
-  `group_id` INT NOT NULL,
+  `group_id` INT DEFAULT NULL,
   `visibility` ENUM ('Public', 'Private') NOT NULL,
-  `place_name` DECIMAL DEFAULT NULL,
-  `place_lat` DECIMAL DEFAULT NULL,
-  `place_lon` DECIMAL DEFAULT NULL,
+  `place_name` VARCHAR(250) DEFAULT NULL,
+  `place_lat` DECIMAL(10,8) DEFAULT NULL,
+  `place_lon` DECIMAL(11,8) DEFAULT NULL,
   `content` TEXT NOT NULL,
   `created_at` INT DEFAULT NULL,
   `updated_at` INT DEFAULT NULL

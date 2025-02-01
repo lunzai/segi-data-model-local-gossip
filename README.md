@@ -55,15 +55,15 @@ CREATE SCHEMA `local_gossip` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unico
 
 5. Configure database connection:
    
-Edit the `DB_CONFIG` in `localgossip.py`:
-```python
-DB_CONFIG = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': '',
-    'database': 'local_gossip'
-}
-```
+   Edit the `DB_CONFIG` in `localgossip.py`:
+   ```python
+   DB_CONFIG = {
+       'host': 'localhost',
+       'user': 'root',
+       'password': '',
+       'database': 'localgossip'
+   }
+   ```
 
 6. Make the script executable:
 ```bash
@@ -71,6 +71,21 @@ chmod +x localgossip.py
 ```
 
 ## Usage
+
+### Test Database Connection
+
+To test your database connection and configuration:
+
+```bash
+python localgossip.py test
+```
+
+This command will:
+- Test MySQL server connection
+- Check if the database exists
+- Verify database connection credentials
+- Check if schema file exists and is readable
+- Provide helpful debugging information and suggestions if any tests fail
 
 ### Initialize Database Schema
 
@@ -100,6 +115,19 @@ This command will:
 - Use Malaysian localization where possible
 - Display progress information
 
+### Full Migration
+
+To perform both initialization and data generation in one command:
+
+```bash
+python localgossip.py migrate
+```
+
+This command will:
+- Run the init command (with confirmation)
+- If successful, run the generate command
+- Display combined progress information
+
 ### Customizing Data Generation
 
 You can modify the number of records generated for each table by editing the `GEN_CONSTANTS` dictionary in `localgossip.py`:
@@ -108,14 +136,18 @@ You can modify the number of records generated for each table by editing the `GE
 GEN_CONSTANTS = {
     'users': 50,
     'groups': 10,
-    'group_users': 100,
-    'flag_categories': 5,
-    'posts': 200,
-    'comments': 400,
+    'group_users': 50,
+    'posts': 100,
+    'comments': 150,
     'files': 100,
-    'tags': 20,
-    'post_likes': 300,
-    'post_mentions': 150
+    'post_files': 50,
+    'comment_files': 50,
+    'tags': 25,
+    'post_likes': 150,
+    'post_mentions': 50,
+    'post_flags': 5,
+    'comment_flags': 5,
+    'post_tags': 100
 }
 ```
 
