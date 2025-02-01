@@ -255,13 +255,23 @@ def generate():
             has_location = random.random() < 0.20
             place_data = {
                 'place_name': fake.street_address() if has_location else None,
-                'place_lat': float(fake.local_latlng()[0]) if has_location else None,  # Malaysian latitude
-                'place_lon': float(fake.local_latlng()[1]) if has_location else None,  # Malaysian longitude
+                'place_lat': float(fake.local_latlng()[0]) if has_location else None,
+                'place_lon': float(fake.local_latlng()[1]) if has_location else None,
+            }
+            
+            # Determine if post should be pinned (10% chance)
+            is_pinned = random.random() < 0.10
+            timestamp = generate_timestamp(_, GEN_CONSTANTS['posts'])
+            pinned_data = {
+                'is_pinned': 1 if is_pinned else 0,
+                'pinned_by': random.choice(user_ids) if is_pinned else None,
+                'pinned_at': timestamp + 3600 if is_pinned else None,  # Pinned 1 hour after creation
             }
             
             cursor.execute("""
-                INSERT INTO post (user_id, group_id, visibility, place_name, place_lat, place_lon, content, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO post (user_id, group_id, visibility, place_name, place_lat, place_lon, 
+                                 content, status, is_pinned, pinned_by, pinned_at, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 random.choice(user_ids),
                 random.choice(group_ids) if random.random() < 0.25 else None,  # 25% chance of group post
@@ -270,7 +280,11 @@ def generate():
                 place_data['place_lat'],
                 place_data['place_lon'],
                 fake.paragraph(),
-                timestamp := generate_timestamp(_, GEN_CONSTANTS['posts']),
+                'Active' if random.random() < 0.90 else 'Inactive',  # 90% chance of being active
+                pinned_data['is_pinned'],
+                pinned_data['pinned_by'],
+                pinned_data['pinned_at'],
+                timestamp,
                 timestamp
             ))
         conn.commit()
