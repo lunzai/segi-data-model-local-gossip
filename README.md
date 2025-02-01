@@ -27,8 +27,8 @@ The tool requires the following:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/localgossip.git
-cd localgossip
+git clone https://github.com/lunzai/segi-data-model-local-gossip local-gossip
+cd local-gossip
 ```
 
 2. (Optional) Create and activate a virtual environment:
